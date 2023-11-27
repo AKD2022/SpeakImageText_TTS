@@ -61,13 +61,16 @@ public class MainActivity extends AppCompatActivity {
     private static final int CAMERA_REQUEST_CODE = 100;
     private static final int STORAGE_REQUEST_CODE = 101;
 
+    private int checkLocale = 0;
+    private int checkImage = 0;
+    private int checkText = 0;
+
     private boolean isSpeaking = false;
     private boolean isPaused = false;
     private int lastPosition = 0;
-    private String spokenText;
+    private String spokenText = "";
     private FloatingActionButton howToUseBtn;
-
-    private int checkClick = 0;
+    private String[] words;  // Array to hold recognized words
 
     private com.google.mlkit.vision.text.TextRecognizer textRecognizer;
 
@@ -97,13 +100,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 showInputImageDialog();
+                checkImage++;
             }
         });
+
 
         changeLocaleBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showLocaleDialog();
+                if (imageUri == null) {
+                    Toast.makeText(MainActivity.this, "Pick an image first...", Toast.LENGTH_SHORT).show();
+                } else if (checkImage != 1) {
+                    Toast.makeText(MainActivity.this, "Pick an image first...", Toast.LENGTH_SHORT).show();
+                } else {
+                    showLocaleDialog();
+                    checkLocale++;
+                }
             }
         });
 
@@ -112,9 +124,11 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 if (imageUri == null) {
                     Toast.makeText(MainActivity.this, "Pick an image first...", Toast.LENGTH_SHORT).show();
+                } else if (checkLocale != 1) {
+                    Toast.makeText(MainActivity.this, "Select the language of the text in image", Toast.LENGTH_SHORT).show();
                 } else {
-                    checkClick = 1;
                     recognizedTextFromImage();
+                    checkText++;
                 }
             }
         });
@@ -129,16 +143,15 @@ public class MainActivity extends AppCompatActivity {
         startStopContinueSpeechBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (!isSpeaking) {
-                    // Start or Continue speaking
-                    startSpeech();
-                } else {
-                    if (isPaused) {
-                        // Continue from where it was paused
-                        continueSpeech();
-                    } else {
-                        // Stop speaking
+                if (checkLocale == 1 && checkText == 1 && checkImage == 1) {
+                    if (isSpeaking) {
                         stopSpeech();
+                    } else {
+                        if (isPaused) {
+                            continueSpeech();
+                        } else {
+                            startSpeech();
+                        }
                     }
                 }
             }
@@ -324,8 +337,10 @@ public class MainActivity extends AppCompatActivity {
                             recognizedTextEt.setText(recognizedText);
 
                             // Speak the recognized text
-                            spokenText = recognizedText;
-                            speakRecognizedText(recognizedText);
+                            spokenText = text.getText();
+                            recognizedTextEt.setText(spokenText);
+
+                            speakRecognizedText();
                         }
                     })
                     .addOnFailureListener(new com.google.android.gms.tasks.OnFailureListener() {
@@ -341,52 +356,48 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void speakRecognizedText(String text) {
-        // Check if Text-to-Speech is ready
+
+    private void speakRecognizedText() {
         if (textToSpeech != null && textToSpeech.getEngines().size() > 0) {
-            // Use a handler to post delayed speech synthesis
-            final Handler handler = new Handler(Looper.getMainLooper());
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    // Speak the recognized text out loud
-                    textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, text);
-                    isSpeaking = true;
-                    isPaused = false;
-                    startStopContinueSpeechBtn.setText("Stop");
-                }
-            }, 100); // Delay before starting speech
+            isSpeaking = false;
+            startStopContinueSpeechBtn.setText("Start");
+
+            if (lastPosition == 0) {
+                Toast.makeText(this, "Press 'Start' to start listening", Toast.LENGTH_SHORT).show();
+            } else {
+                String text = spokenText.substring(lastPosition);
+            }
         }
     }
-
+    
     private void stopSpeech() {
-        if (textToSpeech != null && isSpeaking) {
-            textToSpeech.stop();
+        if (textToSpeech != null) {
+            lastPosition = textToSpeech.stop();
             isSpeaking = false;
-            isPaused = false;
+            isPaused = true;
             startStopContinueSpeechBtn.setText("Continue");
         }
     }
 
     private void continueSpeech() {
-        if (textToSpeech != null && !isPaused) {
-            isPaused = true;
-            lastPosition = spokenText.length() - lastPosition;
+        if (textToSpeech != null && !isSpeaking) {
+            isSpeaking = true;
+            isPaused = false;
+            startStopContinueSpeechBtn.setText("Stop");
+
             String text = spokenText.substring(lastPosition);
             textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, null, text);
-            isSpeaking = true;
-            startStopContinueSpeechBtn.setText("Stop");
         }
     }
+
 
     private void startSpeech() {
         if (textToSpeech != null) {
             String text = recognizedTextEt.getText().toString();
             if (!text.isEmpty()) {
-                spokenText = text;
-                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, text);
                 isSpeaking = true;
                 isPaused = false;
+                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, text);
                 startStopContinueSpeechBtn.setText("Stop");
             }
         }
